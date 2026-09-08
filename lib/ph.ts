@@ -1,25 +1,49 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { ACCESS_PREFIX, unseal } from "./seal";
 
 const PH_ENDPOINT = "https://api.producthunt.com/v2/api/graphql";
 
 /**
  * Per-request credential store. The token never touches disk and is never
  * shared between invocations, which is what lets a single deployment serve
- * many callers (and maps cleanly onto Composio's API-key header injection).
+ * many callers (and maps cleanly onto Composio's auth layer).
  */
 export const phStore = new AsyncLocalStorage<{ token?: string }>();
 
-/** Pull a Product Hunt token off the incoming request, with an env fallback. */
+/**
+ * Resolve the Product Hunt token for this request. Three accepted shapes,
+ * in order:
+ *
+ *   1. `Authorization: Bearer pht_...`  an access token this server issued
+ *      through the OAuth flow, with the caller's PH token sealed inside.
+ *   2. `Authorization: Bearer <raw>` or `X-ProductHunt-Token: <raw>`
+ *      a Product Hunt developer token passed straight through (API-key mode).
+ *   3. `PRODUCTHUNT_TOKEN` env var, as a single-user fallback.
+ *
+ * Both auth modes work side by side, so adding OAuth never breaks an existing
+ * API-key connection.
+ */
 export function extractToken(req: Request): string | undefined {
   const auth = req.headers.get("authorization");
+  let presented: string | undefined;
+
   if (auth && auth.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim();
+    presented = auth.slice(7).trim();
+  } else {
+    presented = req.headers.get("x-producthunt-token") ?? undefined;
   }
-  return (
-    req.headers.get("x-producthunt-token") ??
-    process.env.PRODUCTHUNT_TOKEN ??
-    undefined
-  );
+
+  if (presented?.startsWith(ACCESS_PREFIX)) {
+    try {
+      const payload = unseal<{ t: string }>("access", presented.slice(ACCESS_PREFIX.length));
+      return payload.t;
+    } catch {
+      // An expired or forged token behaves as no token at all; phQuery reports it.
+      return undefined;
+    }
+  }
+
+  return presented ?? process.env.PRODUCTHUNT_TOKEN ?? undefined;
 }
 
 export class PhError extends Error {}
@@ -32,7 +56,7 @@ export async function phQuery<T = unknown>(
   const token = phStore.getStore()?.token ?? process.env.PRODUCTHUNT_TOKEN;
   if (!token) {
     throw new PhError(
-      "No Product Hunt token. Send it as 'Authorization: Bearer <token>' or 'X-ProductHunt-Token', or set PRODUCTHUNT_TOKEN on the deployment. Get a developer token at https://www.producthunt.com/v2/oauth/applications"
+      "No valid Product Hunt credential on this request. Either sign in through OAuth, or send a developer token as 'Authorization: Bearer <token>'. If you signed in a while ago, the session may have expired: reconnect. Developer tokens: https://www.producthunt.com/v2/oauth/applications"
     );
   }
 
@@ -51,7 +75,7 @@ export async function phQuery<T = unknown>(
 
   if (res.status === 401) {
     throw new PhError(
-      "Product Hunt rejected the token (401). Check that it is a valid developer token and that your scopes cover this query."
+      "Product Hunt rejected the credential (401). If this is a developer token, check it is the Developer Token from the API dashboard. If you signed in with OAuth, reconnect your account."
     );
   }
   if (res.status === 429) {
