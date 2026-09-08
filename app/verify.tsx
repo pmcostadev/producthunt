@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import "./verify.css";
 
 type Status = "idle" | "running" | "pass" | "fail";
 
