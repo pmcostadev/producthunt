@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Verify from "./verify";
 
 type Tool = { name: string; tagline: string; args: number };
 
@@ -115,6 +116,8 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        <Verify />
       </section>
 
       <div className="section-head">
