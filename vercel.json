@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app/api/mcp/route.ts": { "maxDuration": 60 }
+  }
+}
