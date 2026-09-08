@@ -1,0 +1,381 @@
+/*
+  Design plan
+  Subject: producthunt-mcp, a read-only MCP server over the Product Hunt GraphQL API.
+  Job of this page: prove the deployment is live, hand over the endpoint, show what it can do.
+  Stolen logic: the Product Hunt daily leaderboard. Ranked rows, tagline under the name,
+  upvote block on the right. Ranking is a real sequence here, so the numerals earn their place.
+  Scene: launch day starts at 12:01am PT, so the page is midnight ink warming to an ember
+  horizon. Dark because the subject is nocturnal, not because dark is a default.
+  Type: Space Grotesk for statement scale, IBM Plex Mono for anything a machine reads.
+  Signature: the upvote block, and a status pill that actually pings /api/health.
+*/
+
+:root {
+  --ink: #0e0b10;
+  --ink-raised: #17131c;
+  --ink-line: #241d2b;
+  --ember: #da552f;
+  --ember-lit: #ff7a45;
+  --amber: #ffb27a;
+  --cream: #f6f0ea;
+  --muted: #9c8f8a;
+  --sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--ink);
+  color: var(--cream);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ember horizon. Drifts slowly, felt before it is noticed. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: auto 0 0 0;
+  height: 62vh;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(120% 100% at 50% 130%, rgba(218, 85, 47, 0.34) 0%, rgba(218, 85, 47, 0.10) 42%, transparent 72%),
+    radial-gradient(80% 70% at 18% 128%, rgba(255, 178, 122, 0.16) 0%, transparent 68%);
+  animation: drift 22s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from { transform: translate3d(-2%, 0, 0) scale(1); }
+  to   { transform: translate3d(3%, -2%, 0) scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  .row, .copy, .pill-dot { transition: none !important; }
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 0 28px 120px;
+}
+
+/* ---------- top bar ---------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.wordmark {
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px 7px 11px;
+  border: 1px solid var(--ink-line);
+  border-radius: 999px;
+  background: var(--ink-raised);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 240ms ease, box-shadow 240ms ease;
+}
+
+.pill[data-state="up"] { color: var(--cream); }
+.pill[data-state="up"] .pill-dot {
+  background: var(--ember-lit);
+  box-shadow: 0 0 0 4px rgba(255, 122, 69, 0.16);
+}
+.pill[data-state="down"] { color: var(--cream); }
+.pill[data-state="down"] .pill-dot { background: #7a5c52; }
+
+/* ---------- hero ---------- */
+
+.hero { padding: 92px 0 76px; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ember-lit);
+  margin: 0 0 26px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(58px, 11.5vw, 132px);
+  font-weight: 700;
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+}
+
+h1 .dim { color: var(--muted); display: block; }
+
+.lede {
+  margin: 34px 0 0;
+  max-width: 34em;
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.lede strong { color: var(--cream); font-weight: 500; }
+
+/* ---------- endpoint ---------- */
+
+.endpoint {
+  margin-top: 46px;
+  border: 1px solid var(--ink-line);
+  border-radius: 14px;
+  background: var(--ink-raised);
+  overflow: hidden;
+}
+
+.endpoint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ink-line);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.endpoint-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+}
+
+.endpoint-url {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--cream);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.endpoint-url::-webkit-scrollbar { display: none; }
+
+.copy {
+  flex: none;
+  border: 1px solid var(--ink-line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cream);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.copy:hover { border-color: var(--ember); color: var(--ember-lit); }
+.copy[data-done="true"] {
+  border-color: var(--ember);
+  background: rgba(218, 85, 47, 0.14);
+  color: var(--ember-lit);
+}
+
+/* ---------- section heading ---------- */
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin: 96px 0 8px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-head .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--ink-line);
+}
+
+.section-head .count {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ember-lit);
+}
+
+/* ---------- leaderboard ---------- */
+
+.board { border-top: 1px solid var(--ink-line); }
+
+.row {
+  display: grid;
+  grid-template-columns: 54px 1fr auto;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 8px;
+  border-bottom: 1px solid var(--ink-line);
+  transition: background 180ms ease;
+}
+
+.row:hover { background: rgba(255, 255, 255, 0.022); }
+
+.rank {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.row:hover .rank { color: var(--ember-lit); }
+
+.name {
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--cream);
+  margin: 0 0 6px;
+}
+
+.tagline {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 46em;
+}
+
+/* the upvote block, lifted straight off a PH launch card */
+.votes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 62px;
+  padding: 9px 0;
+  border: 1px solid var(--ink-line);
+  border-radius: 10px;
+  background: var(--ink-raised);
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.row:hover .votes { border-color: var(--ember); transform: translateY(-2px); }
+
+.votes .caret { font-size: 11px; line-height: 1; color: var(--ember); }
+.row:hover .votes .caret { color: var(--ember-lit); }
+
+.votes .n {
+  font-family: var(--mono);
+  font-size: 17px;
+  line-height: 1;
+  color: var(--cream);
+  font-variant-numeric: tabular-nums;
+}
+
+.votes .unit {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- footer notes ---------- */
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+  gap: 1px;
+  margin-top: 96px;
+  background: var(--ink-line);
+  border: 1px solid var(--ink-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.note {
+  background: var(--ink);
+  padding: 24px 22px;
+}
+
+.note h3 {
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ember-lit);
+}
+
+.note p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.note code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--cream);
+  word-break: break-all;
+}
+
+.note a { color: var(--cream); text-decoration: none; border-bottom: 1px solid var(--ember); }
+.note a:hover { color: var(--ember-lit); }
+
+.sig {
+  margin: 54px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #6d635f;
+}
+
+@media (max-width: 620px) {
+  .shell { padding: 0 20px 90px; }
+  .hero { padding: 62px 0 52px; }
+  .row { grid-template-columns: 34px 1fr auto; gap: 14px; padding: 20px 4px; }
+  .votes { width: 54px; }
+  .lede { font-size: 17px; }
+}
