@@ -1,88 +1,131 @@
 # Product Hunt MCP
 
-A read-only [MCP](https://modelcontextprotocol.io) server wrapping the
-[Product Hunt API v2](https://api.producthunt.com/v2/docs) (GraphQL), served over
-**Streamable HTTP** so it runs on Vercel with no persistent process.
+A read-only [MCP](https://modelcontextprotocol.io) server over the
+[Product Hunt API v2](https://api.producthunt.com/v2/docs) (GraphQL), with an OAuth
+layer so **other people can connect their own Product Hunt account** instead of
+pasting a token.
 
-Built to be registered as a **Composio custom toolkit**, but it works with any MCP
-client (Claude, Cursor, OpenClaw, ChatGPT).
+Streamable HTTP transport, so it runs on Vercel with no persistent process. Built
+for use as a Composio custom toolkit, but works with any MCP client.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/pmcostadev/producthunt-mcp)
+---
+
+## What makes it different
+
+Most API wrappers stop at "paste your token here." This one is also an OAuth
+**authorization server**: it implements RFC 8414 metadata and RFC 7591 dynamic
+client registration, brokers the Product Hunt OAuth handshake, and issues its own
+encrypted, PKCE-bound tokens. An MCP client discovers it, registers itself, and
+sends users through a normal consent screen.
+
+The Product Hunt token is sealed inside the token this server issues, encrypted,
+so there is nothing to store: no database, no session table, no credential at
+rest. Deployment is a single stateless function.
+
+**Writes are blocked at the boundary.** `ph_graphql` parses each query and rejects
+mutations before they reach Product Hunt, which matters because the public API
+exposes no upvote, comment, or submit mutations at all. A tool that pretends
+otherwise just produces confident-sounding failures.
+
+---
 
 ## Tools
 
+18 tools, all read-only.
+
+### Launches
+
 | Tool | What it does |
-|---|---|
-| `ph_get_posts` | List launches. Filter by date range, topic, featured. Order by RANKING / NEWEST / VOTES / FEATURED_AT. |
-| `ph_get_post` | Full detail for one launch by slug or id, including makers. |
-| `ph_get_post_comments` | Read a launch's comment thread. |
-| `ph_search_topics` | Search topics/categories, returns slugs for filtering. |
-| `ph_get_user` | Profile, follower counts and recent launches for a maker. |
-| `ph_whoami` | Verify the token works and see whose account it is. |
-| `ph_graphql` | Escape hatch for arbitrary read queries. Mutations are blocked. |
+| --- | --- |
+| `ph_get_posts` | List launches. Filter by date range, topic, featured, or Twitter URL. Order by RANKING / NEWEST / VOTES / FEATURED_AT. |
+| `ph_get_post` | Full detail for one launch by slug or id, including makers and media. |
+| `ph_get_post_comments` | Read a launch's comments. Order by votes to surface the feedback people agreed with. |
+| `ph_get_comment_thread` | Expand one comment into its full reply thread. |
+| `ph_vote_velocity` | Sample individual vote timestamps and bucket them by hour, to see how fast a launch climbed. |
+| `ph_get_post_collections` | Which curated collections feature a launch. |
+| `ph_check_engagement` | Whether the connected account voted for, collected, or follows the topics of a launch. |
+
+### Topics and collections
+
+| Tool | What it does |
+| --- | --- |
+| `ph_search_topics` | Search topics, returns slugs for filtering. |
+| `ph_get_topic` | Detail and follower count for one topic. |
+| `ph_search_collections` | Find collections, ordered by followers or recency. |
+| `ph_get_collection` | One collection with its launches. |
+
+### People
+
+| Tool | What it does |
+| --- | --- |
+| `ph_get_user` | Profile, follower counts, and headline for a maker. |
+| `ph_get_user_posts` | Launches a user made or voted for. |
+| `ph_get_user_network` | A user's followers or the accounts they follow. |
+| `ph_get_user_followed_collections` | Collections a user follows. |
+| `ph_check_user_follow` | Whether the connected account follows a user. |
+
+### Account and escape hatch
+
+| Tool | What it does |
+| --- | --- |
+| `ph_whoami` | Verify the credential and see whose account it is. |
+| `ph_graphql` | Arbitrary read queries. Mutations are rejected. |
+
+---
 
 ## Deploy
 
-Hit the Deploy button above, or import the repo at [vercel.com/new](https://vercel.com/new).
-No environment variables are required.
-
-Your endpoint will be `https://<your-project>.vercel.app/api/mcp`. Adding a custom
-domain (e.g. `producthunt.yourdomain.com`) gives you a stable URL that doesn't leak
-the Vercel project name.
-
-## Authentication
-
-Credentials are **passed per request and never stored on the server**:
-
-```
-Authorization: Bearer <your-product-hunt-developer-token>
+```bash
+git clone https://github.com/pmcostadev/producthunt.git
+cd producthunt
+npm install
+vercel
 ```
 
-`X-ProductHunt-Token: <token>` also works. As a fallback for single-user setups,
-set `PRODUCTHUNT_TOKEN` as a Vercel environment variable and clients can skip the
-header entirely.
+Endpoint: `https://<your-project>.vercel.app/api/mcp`. A custom domain gives you a
+stable URL that does not leak the Vercel project name.
 
-Get a token: [producthunt.com/v2/oauth/applications](https://www.producthunt.com/v2/oauth/applications)
-→ Add an application → copy the **Developer Token** (not the API Key / API Secret
-pair above it, those are for the full OAuth flow).
+### OAuth mode (recommended)
+
+Create an application at
+[producthunt.com/v2/oauth/applications](https://www.producthunt.com/v2/oauth/applications)
+and set its Redirect URI to `https://<your-domain>/api/oauth/callback`. Then set:
+
+| Variable | Purpose |
+| --- | --- |
+| `PH_CLIENT_ID` | API Key from your Product Hunt application. |
+| `PH_CLIENT_SECRET` | API Secret from the same application. |
+| `OAUTH_SIGNING_SECRET` | 32+ random chars. Encrypts the tokens this server issues. `openssl rand -base64 32` |
+| `PH_SCOPES` | Optional. Defaults to `public private`. |
+| `OAUTH_PUBLIC_ORIGIN` | Optional. Pin the public origin if behind a proxy. |
+
+### Single-user mode
+
+Skip OAuth entirely: set `PRODUCTHUNT_TOKEN` to a developer token and clients can
+call the endpoint with no credential of their own. Per-request headers also work:
+
+```
+Authorization: Bearer <developer-token>
+X-ProductHunt-Token: <developer-token>
+```
+
+---
 
 ## Register as a Composio custom toolkit
 
-Dashboard form:
-
 - **Display name**: `Product Hunt`
 - **MCP server URL**: `https://<your-domain>/api/mcp`
-- **Authentication**: `API Key`
-- **Header**: `Authorization` with format `Bearer {{generic_api_key}}`
-- **Advanced settings → Toolkit ID**: `PRODUCTHUNT`
+- **Authentication**: OAuth (Composio discovers the rest through dynamic client
+  registration; there is nothing to paste)
+- **Toolkit ID**: `PRODUCTHUNT`
 
-Or via the API:
+For single-user mode instead, choose API Key with header `Authorization` and format
+`Bearer {{generic_api_key}}`.
 
-```bash
-curl -X POST https://backend.composio.dev/api/v3.1/custom/toolkits/upsert \
-  -H "x-api-key: $COMPOSIO_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "slug": "PRODUCTHUNT",
-    "toolkit_config": {
-      "name": "Product Hunt",
-      "app_url": "https://<your-domain>/api/mcp",
-      "auth_schemes": [
-        {
-          "mode": "API_KEY",
-          "headers": { "Authorization": "Bearer {{generic_api_key}}" }
-        }
-      ]
-    }
-  }'
-```
+Note: Composio will not let you change `app_url` on an existing custom toolkit. If
+you registered a placeholder first, delete and re-create it.
 
-Then create the auth config with `is_enabled_for_tool_router: true`, connect an
-account using your developer token as the API key, and
-`POST /api/v3.1/custom/toolkits/sync` to pull the tool list in.
-
-Note: Composio will not let you change `app_url` on an existing custom toolkit.
-If you registered a placeholder URL first, delete and re-create it.
+---
 
 ## Smoke test
 
@@ -94,7 +137,7 @@ curl -sN -X POST https://<your-domain>/api/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-You should get seven tools back. Then try a real call:
+Eighteen tools should come back. Then a real call:
 
 ```bash
 curl -sN -X POST https://<your-domain>/api/mcp \
@@ -112,13 +155,26 @@ npm run dev
 # endpoint at http://localhost:3000/api/mcp
 ```
 
-## Limits
+---
 
-- **Read-only by design.** `ph_graphql` rejects mutations. Product Hunt also
-  requires manual approval for write scopes.
+## Limits worth knowing
+
+These are properties of the Product Hunt API, not omissions here:
+
+- **No write mutations exist** in the public API for voting, commenting, or
+  submitting. Write scopes additionally require manual approval, and commercial use
+  requires approval too.
+- **Other users' profiles are redacted** without elevated access: `ph_get_user` on
+  an account that is not yours can return an empty profile with `id: "0"`. The
+  people tools are most useful against the connected account.
+- **Goals and Spaces are gone.** They appear in the published schema but not the
+  live API. Five tools were built against them and removed once live testing
+  proved they could never work.
 - **Rate limit**: 6,250 complexity points per 15 minutes. The server surfaces a
-  clear error on 429 and warns in logs when the budget drops below 500.
-- Runs on the Node runtime (needs `node:async_hooks` for per-request credential
-  isolation), not Edge.
+  clear error on 429 and warns when the remaining budget drops below 500.
+- Node runtime, not Edge: per-request credential isolation uses
+  `node:async_hooks`.
 
-MIT.
+## License
+
+[MIT](./LICENSE).
