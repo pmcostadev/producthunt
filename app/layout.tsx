@@ -1,23 +1,103 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata, Viewport } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+import './globals.css';
+
+/**
+ * Two families, strictly separated by role: Inter carries meaning, JetBrains
+ * Mono carries structure (labels, buttons, counts, anything that measures).
+ *
+ * These replaced Space Grotesk and IBM Plex Mono, which were loaded from a
+ * stylesheet link in the document head. next/font self-hosts them at build time
+ * instead, so there is no render-blocking request to a third party.
+ */
+const sans = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap'
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap'
+});
+
+/**
+ * The canonical origin. VERCEL_URL is deliberately not used: it changes on every
+ * deployment, which would hand search engines a different canonical each time.
+ */
+const SITE = (process.env.OAUTH_PUBLIC_ORIGIN ?? 'https://producthunt.pmcosta.dev').replace(
+  /\/$/,
+  ''
+);
+
+const TITLE = 'Product Hunt MCP';
+const TAGLINE = 'Launch data for AI agents';
+const DESCRIPTION =
+  'A read-only MCP server over the Product Hunt GraphQL API. 18 tools for launches, comments, vote velocity, topics, collections and makers, with an OAuth layer so each user connects their own account. Nothing is stored.';
 
 export const metadata: Metadata = {
-  title: "Product Hunt MCP",
-  description:
-    "Seven read-only tools over the Product Hunt GraphQL API v2, served over Streamable HTTP.",
+  metadataBase: new URL(SITE),
+
+  title: {
+    default: `${TITLE} — ${TAGLINE}`,
+    template: `%s — ${TITLE}`
+  },
+  description: DESCRIPTION,
+  applicationName: TITLE,
+  authors: [{ name: 'Pedro Costa', url: 'https://pmcosta.dev' }],
+  creator: 'Pedro Costa',
+  publisher: 'Pedro Costa',
+  keywords: [
+    'MCP',
+    'Model Context Protocol',
+    'MCP server',
+    'Product Hunt',
+    'Product Hunt API',
+    'GraphQL',
+    'OAuth',
+    'AI agent',
+    'launch data',
+    'Composio',
+    'TypeScript'
+  ],
+  category: 'technology',
+
+  alternates: {
+    canonical: '/'
+  },
+
+  openGraph: {
+    type: 'website',
+    url: '/',
+    siteName: TITLE,
+    title: `${TITLE} — ${TAGLINE}`,
+    description: DESCRIPTION,
+    locale: 'en_US'
+  },
+
+  twitter: {
+    card: 'summary_large_image',
+    title: `${TITLE} — ${TAGLINE}`,
+    description: DESCRIPTION,
+    creator: '@pmcostadev'
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, 'max-image-preview': 'large' }
+  }
+};
+
+export const viewport: Viewport = {
+  themeColor: '#121011',
+  colorScheme: 'dark'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
-        />
-      </head>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );
