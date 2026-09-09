@@ -6,14 +6,15 @@ on:
   pull_request:
     branches: [main]
 
-# A second push should cancel the first run rather than queue behind it.
+# A second push cancels the first run rather than queueing behind it. Cancelled
+# runs show as cancelled, not failed.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Typecheck and build
+    name: Build and typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -22,15 +23,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
       - name: Install
         run: npm install
 
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      # No env vars needed: this server takes its credential per request, and the
-      # OAuth variables are only read at request time.
+      # Build first: it generates next-env.d.ts and the route types that a
+      # standalone tsc run needs. Running tsc before this fails on missing
+      # generated types rather than on anything real. `next build` also
+      # typechecks, so a type error fails here too.
+      #
+      # No env vars needed: this server takes its credential per request.
       - name: Build
         run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit
