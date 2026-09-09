@@ -5,6 +5,12 @@
  * (6,250 points per 15 minutes), so nothing is requested that a tool does not
  * return. Viewer-context fields (isVoted, isFollowing, isCollected) need the
  * `private` scope and only resolve for OAuth-connected accounts.
+ *
+ * Verified against the live API, not against the published schema.graphql in
+ * producthunt/producthunt-api: that file is stale. It still documents the
+ * maker-goals feature (Query.goals, Viewer.goals, Viewer.makerGroups,
+ * MakerGroup, GoalsOrder), none of which exist on the live API any more, and
+ * it omits fields that do exist, such as Post.reviewsCount.
  */
 
 export const POST_CORE = `
@@ -49,27 +55,17 @@ export const USER_CORE = `
   createdAt
 `;
 
-export const GOAL_FIELDS = `
-  id
-  title
-  url
-  current
-  currentUntil
-  dueAt
-  completedAt
-  createdAt
-  cheerCount
-  isCheered
-  focusedDuration
-  group { id name url }
-  project { id name tagline url }
-  user { id name username }
-`;
-
+/**
+ * Collection fields.
+ *
+ * `tagline` is deliberately absent. The schema declares it non-nullable, but
+ * some real collections have no tagline, and asking for it makes the whole
+ * query fail with "Cannot return null for non-nullable field
+ * Collection.tagline". Nothing we can do server-side, so we do not ask.
+ */
 export const COLLECTION_FIELDS = `
   id
   name
-  tagline
   description
   url
   followersCount
@@ -162,7 +158,7 @@ export const GET_POST_COLLECTIONS = `
       collections(first: $first, after: $after) {
         totalCount
         pageInfo { hasNextPage endCursor }
-        edges { node { id name tagline url followersCount user { username } } }
+        edges { node { id name url followersCount user { username } } }
       }
     }
   }
@@ -260,7 +256,7 @@ export const GET_USER_COLLECTIONS = `
       followedCollections(first: $first, after: $after) {
         totalCount
         pageInfo { hasNextPage endCursor }
-        edges { node { id name tagline url followersCount } }
+        edges { node { id name url followersCount } }
       }
     }
   }
@@ -268,9 +264,16 @@ export const GET_USER_COLLECTIONS = `
 
 /* --------------------------------- topics --------------------------------- */
 
+/**
+ * Note the argument name: `followedByUserid`, with a lowercase d.
+ *
+ * That is how the live API spells it. `followedByUserId` is rejected with
+ * "Field 'topics' doesn't accept argument 'followedByUserId' (Did you mean
+ * `followedByUserid`?)". Their typo, and matching it is the only option.
+ */
 export const GET_TOPICS = `
-  query GetTopics($first: Int!, $query: String, $order: TopicsOrder, $followedByUserId: ID, $after: String) {
-    topics(first: $first, query: $query, order: $order, followedByUserId: $followedByUserId, after: $after) {
+  query GetTopics($first: Int!, $query: String, $order: TopicsOrder, $followedByUserid: ID, $after: String) {
+    topics(first: $first, query: $query, order: $order, followedByUserid: $followedByUserid, after: $after) {
       totalCount
       pageInfo { hasNextPage endCursor }
       edges { node { id name slug description followersCount postsCount isFollowing url } }
@@ -312,74 +315,11 @@ export const GET_COLLECTION = `
   }
 `;
 
-/* ---------------------------- goals & maker spaces ------------------------- */
-
-export const GET_GOALS = `
-  query GetGoals($first: Int!, $order: GoalsOrder, $completed: Boolean, $userId: ID, $makerGroupId: ID, $makerProjectId: ID, $after: String) {
-    goals(first: $first, order: $order, completed: $completed, userId: $userId, makerGroupId: $makerGroupId, makerProjectId: $makerProjectId, after: $after) {
-      totalCount
-      pageInfo { hasNextPage endCursor }
-      edges { node { ${GOAL_FIELDS} } }
-    }
-  }
-`;
-
-export const GET_GOAL = `
-  query GetGoal($id: ID!) {
-    goal(id: $id) { ${GOAL_FIELDS} }
-  }
-`;
-
-export const GET_MAKER_GROUPS = `
-  query GetMakerGroups($first: Int!, $order: MakerGroupsOrder, $userId: ID, $after: String) {
-    makerGroups(first: $first, order: $order, userId: $userId, after: $after) {
-      totalCount
-      pageInfo { hasNextPage endCursor }
-      edges { node { id name tagline description url membersCount goalsCount isMember } }
-    }
-  }
-`;
-
-export const GET_MAKER_GROUP = `
-  query GetMakerGroup($id: ID!) {
-    makerGroup(id: $id) { id name tagline description url membersCount goalsCount isMember }
-  }
-`;
-
 /* --------------------------------- viewer --------------------------------- */
 
 export const GET_VIEWER = `
   query GetViewer {
     viewer { user { ${USER_CORE} followers { totalCount } following { totalCount } } }
-  }
-`;
-
-export const GET_MY_GOALS = `
-  query GetMyGoals($first: Int!, $order: GoalsOrder, $current: Boolean, $after: String) {
-    viewer {
-      user { username }
-      goals(first: $first, order: $order, current: $current, after: $after) {
-        totalCount
-        pageInfo { hasNextPage endCursor }
-        edges { node { ${GOAL_FIELDS} } }
-      }
-    }
-  }
-`;
-
-export const GET_MY_SPACES = `
-  query GetMySpaces($first: Int!) {
-    viewer {
-      user { username }
-      makerGroups(first: $first) {
-        totalCount
-        edges { node { id name tagline url membersCount goalsCount } }
-      }
-      makerProjects(first: $first) {
-        totalCount
-        edges { node { id name tagline url image lookingForOtherMakers } }
-      }
-    }
   }
 `;
 
