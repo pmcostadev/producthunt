@@ -19,9 +19,15 @@ export function registerTopicTools(server: Registrar) {
       }),
       annotations: READ_ONLY,
     },
-    async (args) => {
+    async ({ followedByUserId, ...rest }) => {
       try {
-        const d = await phQuery<any>(GET_TOPICS, { ...args });
+        // The live API spells this argument `followedByUserid`, with a lowercase
+        // d. The tool keeps the conventional casing for callers and translates
+        // here, so the quirk stays in one place.
+        const d = await phQuery<any>(GET_TOPICS, {
+          ...rest,
+          followedByUserid: followedByUserId,
+        });
         return ok({
           totalCount: d.topics.totalCount,
           pageInfo: d.topics.pageInfo,
